@@ -13,8 +13,11 @@ import aws_cdk.aws_elasticloadbalancingv2 as elb
 import aws_cdk.aws_elasticloadbalancingv2_actions as elb_actions
 import aws_cdk.aws_lambda as _lambda
 import aws_cdk.aws_route53 as route53
+import aws_cdk.aws_ssm as ssm
 
-from aws_cdk import core
+# from aws_cdk import core
+import aws_cdk as core
+from constructs import Construct
 
 import infrastructure.configuration as configuration
 
@@ -34,17 +37,31 @@ class DemoStack(core.Stack):
     user_pool_logout_url: str
     user_pool_user_info_url: str
 
-    def __init__(self, scope: core.Construct, id: str,
-                 config: configuration.Config,  **kwargs) -> None:
+    # def __init__(self, scope: core.Construct, id: str,
+    #              config: configuration.Config,  **kwargs) -> None:
+    def __init__(self, scope: Construct, id: str,
+                 config: configuration.Config, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
+
+        # We import the fleet scheduling VPC ID
+        fleetSchedulingServiceEcsVpcId = ssm.StringParameter.value_from_lookup(
+            self,
+            parameter_name="FleetSchedulingServiceEcsVpcId"
+        )
+        # We import the fleet scheduling VPC
+        vpc = ec2.Vpc.from_lookup(
+            self,
+            id="FleetSchedulingServiceEcsVpcImported",
+            vpc_id=fleetSchedulingServiceEcsVpcId
+        )
 
         self.config = config
 
-        self.add_cognito()
+        self.add_cognito(vpc)
 
-        self.add_webapp()
+        self.add_webapp(vpc)
 
-    def add_cognito(self):
+    def add_cognito(self, vpc):
         """
         Sets up the cognito infrastructure with the user pool, custom domain
         and app client for use by the ALB.
@@ -73,6 +90,7 @@ class DemoStack(core.Stack):
             ),
             handler="lambda_handler.lambda_handler",
             runtime=_lambda.Runtime.PYTHON_3_8,
+            vpc=vpc
         )
 
         self.user_pool.add_trigger(
@@ -129,16 +147,16 @@ class DemoStack(core.Stack):
 
         self.user_pool_user_info_url = f"{self.user_pool_full_domain}/oauth2/userInfo"
 
-    def add_webapp(self):
+    def add_webapp(self, vpc):
         """
         Adds the ALB, ECS-Service and Cognito Login Action on the ALB.
         """
 
-        # Create the ecs cluster to house our service, this also creates a VPC in 2 AZs
-        cluster = ecs.Cluster(
-            self,
-            "cluster"
-        )
+        # # Create the ecs cluster to house our service, this also creates a VPC in 2 AZs
+        # cluster = ecs.Cluster(
+        #     self,
+        #     "cluster"
+        # )
 
         # Load the hosted zone
         hosted_zone = route53.HostedZone.from_hosted_zone_attributes(
@@ -167,7 +185,8 @@ class DemoStack(core.Stack):
         fargate_service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self,
             "fargate-service",
-            cluster=cluster,
+            # cluster=cluster,
+            vpc=vpc,
             certificate=certificate,
             domain_name=self.config.application_dns_name,
             domain_zone=hosted_zone,
@@ -227,8 +246,8 @@ class DemoStack(core.Stack):
                 user_pool_client=self.user_pool_client,
                 user_pool_domain=self.user_pool_custom_domain,
 
-            ),
-            host_header=self.config.application_dns_name
+            )#,
+            # host_header=self.config.application_dns_name
         )
 
         # Overwrite the default action to show a 403 fixed response in case somebody
