@@ -232,22 +232,59 @@ class DemoStack(core.Stack):
             value="10"
         )
 
-        # Add the authentication actions as a rule with priority
-        fargate_service.listener.add_action(
-            "authenticate-rule",
-            priority=1000,
-            action=elb_actions.AuthenticateCognitoAction(
-                next=elb.ListenerAction.forward(
-                    target_groups=[
-                        fargate_service.target_group
-                    ]
-                ),
-                user_pool=self.user_pool,
-                user_pool_client=self.user_pool_client,
-                user_pool_domain=self.user_pool_custom_domain,
+        # # Add the authentication actions as a rule with priority
+        # fargate_service.listener.add_action(
+        #     "authenticate-rule",
+        #     priority=1000,
+        #     action=elb_actions.AuthenticateCognitoAction(
+        #         next=elb.ListenerAction.forward(
+        #             target_groups=[
+        #                 fargate_service.target_group
+        #             ]
+        #         ),
+        #         user_pool=self.user_pool,
+        #         user_pool_client=self.user_pool_client,
+        #         user_pool_domain=self.user_pool_custom_domain,
+        #
+        #     ),
+        #     host_header=self.config.application_dns_name
+        # )
 
-            )#,
-            # host_header=self.config.application_dns_name
+        # Enable authentication on the Load Balancer
+        alb_listener: elb.CfnListener = fargate_service.listener.node.default_child
+
+        elb.CfnListenerRule(
+            self,
+            "authenticate-rule",
+            actions=[
+                {
+                    "type": "authenticate-cognito",
+                    "authenticateCognitoConfig": elb.CfnListenerRule.AuthenticateCognitoConfigProperty(
+                        user_pool_arn=self.user_pool.user_pool_arn,
+                        user_pool_client_id=self.user_pool_client.user_pool_client_id,
+                        user_pool_domain=self.user_pool_custom_domain.domain_name
+                    ),
+                    "order": 1
+                },
+                {
+                    "type": "forward",
+                    "order": 10,
+                    "targetGroupArn": fargate_service.target_group.target_group_arn
+                }
+            ],
+            conditions=[
+                {
+                    "field": "host-header",
+                    "hostHeaderConfig": {
+                        "values": [
+                            f"{self.config.application_dns_name}"
+                        ]
+                    }
+                }
+            ],
+            # Reference the Listener ARN
+            listener_arn=alb_listener.ref,
+            priority=1000
         )
 
         # Overwrite the default action to show a 403 fixed response in case somebody
