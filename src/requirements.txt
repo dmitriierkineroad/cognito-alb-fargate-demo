@@ -1,5 +1,6 @@
 # Flask
-flask==1.1.1
+# flask==1.1.1
+flask==2.0.3
 
 # JSON Web Token lib
 pyjwt==1.7.1

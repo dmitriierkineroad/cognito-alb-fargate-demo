@@ -89,7 +89,8 @@ class DemoStack(core.Stack):
                 path=os.path.join(os.path.dirname(__file__), "..", "auto_confirm_function")
             ),
             handler="lambda_handler.lambda_handler",
-            runtime=_lambda.Runtime.PYTHON_3_8,
+            # runtime=_lambda.Runtime.PYTHON_3_8,
+            runtime=_lambda.Runtime.PYTHON_3_9,
             vpc=vpc
         )
 
@@ -199,7 +200,8 @@ class DemoStack(core.Stack):
                     "USER_INFO_URL": self.user_pool_user_info_url,
                 }
             ),
-            redirect_http=True
+            redirect_http=True,
+            health_check_grace_period=core.Duration.days(365)
         )
 
         # Configure the health checks to use our /healthcheck endpoint
